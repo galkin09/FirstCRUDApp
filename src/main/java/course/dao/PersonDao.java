@@ -1,43 +1,78 @@
 package course.dao;
 
 import course.models.Person;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.BatchPreparedStatementSetter;
+import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
 
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+
 @Component
 public class PersonDao {
-    private static int COUNT;
-    private List<Person> people;
 
-    {
-        people = new ArrayList<>();
+    private final JdbcTemplate jdbcTemplate;
 
-        people.add(new Person(++COUNT, "Tom"));
-        people.add(new Person(++COUNT, "Jack"));
-        people.add(new Person(++COUNT, "Bob"));
-        people.add(new Person(++COUNT, "Katy"));
+    @Autowired
+    public PersonDao(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public List<Person> index() {
-        return people;
+        return jdbcTemplate.query("SELECT * FROM Person", new BeanPropertyRowMapper<>(Person.class));
     }
 
     public Person show(int id) {
-        return people.stream().filter(person -> person.getId() == id).findAny().orElse(null);
+        return jdbcTemplate.query("SELECT * FROM Person WHERE id=?", new Object[]{id}, new BeanPropertyRowMapper<>(Person.class))
+                .stream().findAny().orElse(null);
     }
 
     public void save(Person person) {
-        person.setId(++COUNT);
-        people.add(person);
+        jdbcTemplate.update("INSERT INTO Person VALUES (1,?,?,?)", person.getName(), person.getAge(), person.getEmail());
     }
 
     public void update(int id, Person updatedPerson) {
-        Person personToUpdate = show(id);
-        personToUpdate.setName(updatedPerson.getName());
+        jdbcTemplate.update("UPDATE Person SET name=?, age=?, email=? WHERE id=?", updatedPerson.getName(),
+                updatedPerson.getAge(), updatedPerson.getEmail());
+    }
+    public void delete (int id){
+        jdbcTemplate.update("DELETE FROM Person WHERE id=?", id);
+        }
+
+    public void testMultipleUpdate(){
+       List<Person> people = create1000people();
+       for (Person person : people) {
+           jdbcTemplate.update("INSERT INTO Person VALUES (1,?,?,?)", person.getName(), person.getAge(), person.getEmail());
+       }
     }
 
-    public void delete(int id) {
-        people.removeIf(person -> person.getId() == id);
+    public void testBatchUpdate(){
+        List<Person> people = create1000people();
+        jdbcTemplate.batchUpdate("INSERT INTO Person VALUES (?,?,?,?)", new BatchPreparedStatementSetter() {
+            @Override
+            public void setValues(PreparedStatement preparedStatement, int i) throws SQLException {
+                preparedStatement.setInt(1, people.get(i).getId());
+                preparedStatement.setString(2, people.get(i).getName());
+                preparedStatement.setInt(3, people.get(i).getAge());
+                preparedStatement.setString(4, people.get(i).getEmail());
+            }
+
+            @Override
+            public int getBatchSize() {
+                return people.size();
+            }
+        });
+    }
+
+    private List<Person> create1000people() {
+        List<Person> people = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            people.add(new Person(i, "Name "+ i, i,"email"+ i +"@email.com" ));
+        }
+        return people;
     }
 }
